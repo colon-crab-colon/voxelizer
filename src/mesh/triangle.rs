@@ -80,6 +80,7 @@ impl Triangle {
             && intersection.v <= 1.0
             && (intersection.u + intersection.v) <= 1.0
         {
+            std::mem::swap(&mut intersection.u, &mut intersection.v);
             return Some(intersection);
         }
 
