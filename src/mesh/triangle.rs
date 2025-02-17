@@ -3,7 +3,7 @@ use bvh::{
     bounding_hierarchy::BHShape,
     ray::{Intersection, Ray},
 };
-use nalgebra::{OPoint, Vector2, Vector3};
+use nalgebra::{OPoint, SimdValue, Vector2, Vector3};
 
 pub struct Triangle {
     pub position_a: Vector3<f32>,
@@ -47,7 +47,8 @@ impl Triangle {
     }
 
     pub fn intersects(&self, ray: &Ray<f32, 3>) -> Option<Intersection<f32>> {
-        // Erste Intersection testen
+        const EPSILON: f32 = 1e-5;
+
         let mut intersection = ray.intersects_triangle(
             &OPoint::from(self.position_a),
             &OPoint::from(self.position_b),
@@ -55,17 +56,21 @@ impl Triangle {
         );
 
         if intersection.distance != f32::INFINITY
-            && intersection.distance >= 0.0
-            && intersection.u >= 0.0
-            && intersection.u <= 1.0
-            && intersection.v >= 0.0
-            && intersection.v <= 1.0
-            && (intersection.u + intersection.v) <= 1.0
+            && intersection.distance >= -EPSILON
+            && intersection.u >= -EPSILON
+            && intersection.u <= 1.0 + EPSILON
+            && intersection.v >= -EPSILON
+            && intersection.v <= 1.0 + EPSILON
+            && (intersection.u + intersection.v) <= 1.0 + EPSILON
         {
+            if intersection.distance < 0.0 {
+                intersection.distance = 0.0;
+            }
+            intersection.u = intersection.u.clamp(0.0, 1.0);
+            intersection.v = intersection.v.clamp(0.0, 1.0);
             return Some(intersection);
         }
 
-        // Wenn der erste Test fehlschlägt, versuchen wir es mit umgekehrter Winding-Order
         intersection = ray.intersects_triangle(
             &OPoint::from(self.position_a),
             &OPoint::from(self.position_c),
@@ -73,13 +78,18 @@ impl Triangle {
         );
 
         if intersection.distance != f32::INFINITY
-            && intersection.distance >= 0.0
-            && intersection.u >= 0.0
-            && intersection.u <= 1.0
-            && intersection.v >= 0.0
-            && intersection.v <= 1.0
-            && (intersection.u + intersection.v) <= 1.0
+            && intersection.distance >= -EPSILON
+            && intersection.u >= -EPSILON
+            && intersection.u <= 1.0 + EPSILON
+            && intersection.v >= -EPSILON
+            && intersection.v <= 1.0 + EPSILON
+            && (intersection.u + intersection.v) <= 1.0 + EPSILON
         {
+            if intersection.distance < 0.0 {
+                intersection.distance = 0.0;
+            }
+            intersection.u = intersection.u.clamp(0.0, 1.0);
+            intersection.v = intersection.v.clamp(0.0, 1.0);
             std::mem::swap(&mut intersection.u, &mut intersection.v);
             return Some(intersection);
         }
@@ -88,10 +98,15 @@ impl Triangle {
     }
 }
 
+const BBOX_MARGIN: f32 = 0.001;
+
 impl Bounded<f32, 3> for Triangle {
     fn aabb(&self) -> Aabb<f32, 3> {
-        let min = self.position_a.inf(&self.position_b).inf(&self.position_c);
-        let max = self.position_a.sup(&self.position_b).sup(&self.position_c);
+        let mut min = self.position_a.inf(&self.position_b).inf(&self.position_c);
+        let mut max = self.position_a.sup(&self.position_b).sup(&self.position_c);
+
+        min -= Vector3::new(BBOX_MARGIN, BBOX_MARGIN, BBOX_MARGIN);
+        max += Vector3::new(BBOX_MARGIN, BBOX_MARGIN, BBOX_MARGIN);
 
         Aabb {
             min: OPoint::from(min),
